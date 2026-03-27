@@ -217,7 +217,7 @@ export default function Home() {
               playsInline
               preload="metadata"
             >
-              <source src="/FahimAE1-Promo.mp4" type="video/mp4" />
+              <source src="https://qpvyfayjzhcasvfpjapb.supabase.co/storage/v1/object/public/public-assets/promoV2.mp4" type="video/mp4" />
             </video>
           </div>
         </div>
