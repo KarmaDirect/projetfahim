@@ -161,37 +161,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setMessages([])
     }
 
-    // Load goals
-    const { data: dbGoals } = await supabase.from('goals').select('*').order('created_at', { ascending: false })
-    if (dbGoals) {
-      setGoals(dbGoals as Goal[])
-    } else {
-      setGoals([])
-    }
+    // Load optional tables (may not exist yet) - don't let failures block other data
+    try {
+      const { data: dbGoals } = await supabase.from('goals').select('*').order('created_at', { ascending: false })
+      if (dbGoals) setGoals(dbGoals as Goal[])
+    } catch { /* table may not exist */ }
 
-    // Load reviews
-    const { data: dbReviews } = await supabase.from('reviews').select('*').order('created_at', { ascending: false })
-    if (dbReviews) {
-      setReviews(dbReviews as Review[])
-    } else {
-      setReviews([])
-    }
+    try {
+      const { data: dbReviews } = await supabase.from('reviews').select('*').order('created_at', { ascending: false })
+      if (dbReviews) setReviews(dbReviews as Review[])
+    } catch { /* table may not exist */ }
 
-    // Load days off
-    const { data: dbDaysOff } = await supabase.from('days_off').select('*').order('created_at', { ascending: false })
-    if (dbDaysOff) {
-      setDaysOff(dbDaysOff as DayOff[])
-    } else {
-      setDaysOff([])
-    }
+    try {
+      const { data: dbDaysOff } = await supabase.from('days_off').select('*').order('created_at', { ascending: false })
+      if (dbDaysOff) setDaysOff(dbDaysOff as DayOff[])
+    } catch { /* table may not exist */ }
 
-    // Load work schedule
-    const { data: dbWorkSchedule } = await supabase.from('work_schedule').select('*')
-    if (dbWorkSchedule) {
-      setWorkSchedule(dbWorkSchedule as WorkSchedule[])
-    } else {
-      setWorkSchedule([])
-    }
+    try {
+      const { data: dbWorkSchedule } = await supabase.from('work_schedule').select('*')
+      if (dbWorkSchedule) setWorkSchedule(dbWorkSchedule as WorkSchedule[])
+    } catch { /* table may not exist */ }
 
     // Load order attachments
     const { data: dbAttachments } = await supabase.from('order_attachments').select('*').order('created_at', { ascending: false })
@@ -228,8 +217,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setCurrentUser(userProfile)
           await loadSupabaseData(user.id, userProfile.role)
         }
-      } catch {
-        // Supabase not configured or network error — continue with mock mode
+      } catch (err) {
+        console.error('[Fahim AE] Session restore error:', err)
       } finally {
         setAuthLoading(false)
       }
@@ -623,11 +612,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const sendMessage = useCallback(async (msgData: Omit<ChatMessage, 'id' | 'created_at' | 'read'>) => {
     if (currentUser && !currentUser.id.startsWith('client-')) {
-      const { data } = await supabase.from('messages').insert({
+      const { data, error } = await supabase.from('messages').insert({
         sender_id: msgData.sender_id,
         receiver_id: msgData.receiver_id,
         content: msgData.content,
       }).select().single()
+      if (error) {
+        console.error('[Fahim AE] Message insert error:', error)
+      }
       if (data) {
         setMessages(prev => [...prev, data as ChatMessage])
         return
