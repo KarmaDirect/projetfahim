@@ -192,56 +192,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Session management
-  // getSession() reads from localStorage (no network, no lock conflict)
-  // onAuthStateChange handles sign in/out events after initial load
+  // Session restore on mount + auth state listener
   useEffect(() => {
     let mounted = true
 
-    const loadUserProfile = async (user: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at: string }) => {
+    const loadUserProfile = async (userId: string, email: string, metadata: Record<string, unknown>) => {
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', userId)
         .single()
 
-      const meta = user.user_metadata || {}
-      const role = (profile?.role || meta.role || 'client') as Profile['role']
-      const userProfile: Profile = profile ? (profile as Profile) : {
-        id: user.id,
-        email: user.email || '',
-        full_name: String(meta.full_name || ''),
-        company: String(meta.company || ''),
+      const role = (profile?.role || metadata?.role || 'client') as Profile['role']
+      return profile ? (profile as Profile) : {
+        id: userId,
+        email,
+        full_name: String(metadata?.full_name || ''),
+        company: String(metadata?.company || ''),
         role,
-        created_at: user.created_at,
-        updated_at: user.created_at,
-      }
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as Profile
+    }
+
+    // Restore session from cookie — getSession() reads from storage, no network lock
+    supabase.auth.getSession().then(async ({ data: { session } }: { data: { session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown> } } | null } }) => {
       if (!mounted) return
-      setCurrentUser(userProfile)
-      try {
-        await loadSupabaseData(user.id, userProfile.role)
-      } catch (loadErr) {
-        console.error('[Fahim AE] loadSupabaseData error (non-blocking):', loadErr)
-      }
-    }
-
-    // 1. Immediate restore from local session (no network call, no lock)
-    const restoreSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user && mounted) {
-          await loadUserProfile(session.user)
+      if (session?.user) {
+        try {
+          const userProfile = await loadUserProfile(session.user.id, session.user.email || '', session.user.user_metadata || {})
+          if (mounted) {
+            setCurrentUser(userProfile)
+            setAuthLoading(false) // Unblock UI immediately — data loads in background
+            loadSupabaseData(session.user.id, userProfile.role).catch(() => {})
+            return // authLoading already set
+          }
+        } catch (err) {
+          console.error('[Fahim AE] Session restore error:', err)
         }
-      } catch (err) {
-        console.error('[Fahim AE] getSession error:', err)
-      } finally {
-        if (mounted) setAuthLoading(false)
       }
-    }
-    restoreSession()
+      if (mounted) setAuthLoading(false)
+    }).catch(() => {
+      if (mounted) setAuthLoading(false)
+    })
 
-    // 2. Listen for auth changes (sign in, sign out, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string) => {
+    // Listen for sign-in / sign-out only
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
       if (!mounted) return
       if (event === 'SIGNED_OUT') {
         setCurrentUser(null)
@@ -258,13 +254,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setPortfolioProjects(MOCK_PORTFOLIO_PROJECTS)
         setPortfolioBlocks(MOCK_PORTFOLIO_BLOCKS)
         setOrderAttachments([])
-      } else if (event === 'SIGNED_IN') {
-        // Reload session after sign in (login was already handled by login(), but this catches OAuth etc)
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user && mounted) {
-          await loadUserProfile(session.user)
-        }
       }
+      // SIGNED_IN is already handled by login() — no need to reload here
+      // This prevents double-loading on login and the associated lock conflicts
     })
 
     return () => {
