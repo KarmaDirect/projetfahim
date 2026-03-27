@@ -168,9 +168,9 @@ export default function MainContent({ profile }: { profile: Profile }) {
               <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-0.5 truncate">{stat.title}</p>
               <p className="font-bold text-[#1F2937] dark:text-white truncate">{stat.metric}</p>
             </div>
-            <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <div className="p-2 text-gray-300 dark:text-gray-600">
               <MoreHorizontal size={20} />
-            </button>
+            </div>
           </div>
         ))}
       </div>

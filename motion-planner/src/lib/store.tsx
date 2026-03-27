@@ -192,44 +192,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Restore session on mount
+  // Session management — single listener, no competing getUser() call
   useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-
-          const role = profile?.role || user.user_metadata?.role || 'client'
-          const userProfile: Profile = profile ? (profile as Profile) : {
-              id: user.id,
-              email: user.email || '',
-              full_name: user.user_metadata?.full_name || '',
-              company: user.user_metadata?.company || '',
-              role: role as Profile['role'],
-              created_at: user.created_at,
-              updated_at: user.created_at,
-            }
-          setCurrentUser(userProfile)
-          try {
-            await loadSupabaseData(user.id, userProfile.role)
-          } catch (loadErr) {
-            console.error('[Fahim AE] loadSupabaseData error (non-blocking):', loadErr)
-          }
-        }
-      } catch (err) {
-        console.error('[Fahim AE] Session restore error:', err)
-      } finally {
+    const handleSession = async (session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at: string } } | null) => {
+      if (!session?.user) {
+        setCurrentUser(null)
         setAuthLoading(false)
+        return
       }
-    }
-    restoreSession()
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at: string } } | null) => {
+      const meta = session.user.user_metadata || {}
+      const role = (profile?.role || meta.role || 'client') as Profile['role']
+      const userProfile: Profile = profile ? (profile as Profile) : {
+        id: session.user.id,
+        email: session.user.email || '',
+        full_name: String(meta.full_name || ''),
+        company: String(meta.company || ''),
+        role,
+        created_at: session.user.created_at,
+        updated_at: session.user.created_at,
+      }
+      setCurrentUser(userProfile)
+      try {
+        await loadSupabaseData(session.user.id, userProfile.role)
+      } catch (loadErr) {
+        console.error('[Fahim AE] loadSupabaseData error (non-blocking):', loadErr)
+      }
+      setAuthLoading(false)
+    }
+
+    type SessionType = { user: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at: string } } | null
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: SessionType) => {
       if (event === 'SIGNED_OUT') {
         setCurrentUser(null)
         setProfiles(MOCK_PROFILES)
@@ -245,30 +243,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setPortfolioProjects(MOCK_PORTFOLIO_PROJECTS)
         setPortfolioBlocks(MOCK_PORTFOLIO_BLOCKS)
         setOrderAttachments([])
-      } else if (event === 'SIGNED_IN' && session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-
-        const meta = session.user.user_metadata || {}
-        const role = (profile?.role || meta.role || 'client') as Profile['role']
-        const userProfile: Profile = profile ? (profile as Profile) : {
-          id: session.user.id,
-          email: session.user.email || '',
-          full_name: String(meta.full_name || ''),
-          company: String(meta.company || ''),
-          role,
-          created_at: session.user.created_at,
-          updated_at: session.user.created_at,
-        }
-        setCurrentUser(userProfile)
-        try {
-          await loadSupabaseData(session.user.id, userProfile.role)
-        } catch (loadErr) {
-          console.error('[Fahim AE] onAuthStateChange loadSupabaseData error:', loadErr)
-        }
+        setAuthLoading(false)
+      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await handleSession(session)
       }
     })
 
