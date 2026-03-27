@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx:*)",
+      "Bash(npm install:*)",
+      "Bash(find src:*)",
+      "Bash(xargs sed:*)",
+      "Bash(npm i:*)",
+      "Bash(wc:*)",
+      "Bash(curl:*)",
+      "Bash(dir \"C:\\\\Users\\\\hatim\\\\Desktop\\\\planning\")",
+      "Bash(grep -iE '\\\\.\\(mp4|mov|webm|mp3|wav|ogg|m4a|aac\\)$')",
+      "Bash(ffprobe -v quiet -show_entries format=duration -of csv=p=0 public/\"realisation_pouryoutubeurs.mp4\")",
+      "Bash(git init:*)",
+      "Bash(git rm:*)",
+      "Bash(rm -rf motion-planner/.git remotion-skills/.git)",
+      "Bash(git add:*)"
+    ]
+  }
+}
