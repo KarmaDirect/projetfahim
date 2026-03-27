@@ -31,8 +31,8 @@ export default function SignupPage() {
       } else {
         setError('Un compte existe déjà avec cet email.')
       }
-    } catch {
-      setError('Erreur lors de la création du compte. Veuillez réessayer.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la création du compte. Veuillez réessayer.')
     } finally {
       setLoading(false)
     }

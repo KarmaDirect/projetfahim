@@ -29,8 +29,8 @@ export default function LoginPage() {
       } else {
         setError('Email ou mot de passe incorrect. Essayez un des comptes de démo ci-dessous.')
       }
-    } catch {
-      setError('Erreur de connexion. Veuillez réessayer.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur de connexion. Veuillez réessayer.')
     } finally {
       setLoading(false)
     }
@@ -118,6 +118,11 @@ export default function LoginPage() {
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
                   placeholder="••••••••"
                 />
+                <div className="mt-2 text-right">
+                  <Link href="/reset-password" className="text-sm text-gray-500 hover:text-primary transition-colors">
+                    Mot de passe oublié ?
+                  </Link>
+                </div>
               </div>
 
               <button

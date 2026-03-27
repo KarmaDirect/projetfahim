@@ -3,7 +3,7 @@ export interface Profile {
   email: string
   full_name: string
   company: string
-  role: 'admin' | 'client'
+  role: 'admin' | 'client' | 'partner'
   user_type?: 'partner' | 'client_direct'
   specialty?: string
   monthly_volume?: string
