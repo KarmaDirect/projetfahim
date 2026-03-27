@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# large media files
+/public/FahimAE1-Promo.mp4
+
 # debug
 npm-debug.log*
 yarn-debug.log*
