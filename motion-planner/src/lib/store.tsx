@@ -236,7 +236,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     restoreSession()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at: string } } | null) => {
       if (event === 'SIGNED_OUT') {
         setCurrentUser(null)
         setProfiles(MOCK_PROFILES)
@@ -259,13 +259,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .eq('id', session.user.id)
           .single()
 
-        const role = profile?.role || session.user.user_metadata?.role || 'client'
+        const meta = session.user.user_metadata || {}
+        const role = (profile?.role || meta.role || 'client') as Profile['role']
         const userProfile: Profile = profile ? (profile as Profile) : {
           id: session.user.id,
           email: session.user.email || '',
-          full_name: session.user.user_metadata?.full_name || '',
-          company: session.user.user_metadata?.company || '',
-          role: role as Profile['role'],
+          full_name: String(meta.full_name || ''),
+          company: String(meta.company || ''),
+          role,
           created_at: session.user.created_at,
           updated_at: session.user.created_at,
         }
@@ -277,6 +278,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Realtime subscription for messages
+  useEffect(() => {
+    if (!currentUser || currentUser.id.startsWith('client-')) return
+
+    const channel = supabase
+      .channel('messages-realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+      }, (payload: { new: Record<string, unknown> }) => {
+        const newMsg = payload.new as unknown as ChatMessage
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMsg.id)) return prev
+          return [...prev, newMsg]
+        })
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+      }, (payload: { new: Record<string, unknown> }) => {
+        const updated = payload.new as unknown as ChatMessage
+        setMessages(prev => prev.map(m => m.id === updated.id ? updated : m))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id])
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
