@@ -333,7 +333,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (user) setCurrentUser(user)
   }, [profiles])
 
-  const addOrder = useCallback((orderData: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'total_price' | 'status' | 'scheduled_start' | 'scheduled_end' | 'admin_notes'>) => {
+  const addOrder = useCallback(async (orderData: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'total_price' | 'status' | 'scheduled_start' | 'scheduled_end' | 'admin_notes'>) => {
+    // Try Supabase first
+    if (currentUser && !currentUser.id.startsWith('client-')) {
+      const { data, error } = await supabase.from('orders').insert({
+        client_id: orderData.client_id,
+        client_name: orderData.client_name,
+        project_name: orderData.project_name,
+        description: orderData.description,
+        seconds_ordered: orderData.seconds_ordered,
+        price_per_second: orderData.price_per_second,
+        production_days: orderData.production_days,
+        deadline: orderData.deadline,
+      }).select().single()
+      if (!error && data) {
+        setOrders(prev => [data as Order, ...prev])
+        return
+      }
+    }
+    // Fallback to local
     const newOrder: Order = {
       ...orderData,
       id: `order-${Date.now()}`,
@@ -346,19 +364,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updated_at: new Date().toISOString(),
     }
     setOrders(prev => [newOrder, ...prev])
-  }, [])
+  }, [currentUser, supabase])
 
-  const updateOrder = useCallback((id: string, updates: Partial<Order>) => {
+  const updateOrder = useCallback(async (id: string, updates: Partial<Order>) => {
+    // Try Supabase first
+    if (currentUser && !id.startsWith('order-')) {
+      const { total_price, ...safeUpdates } = updates as Record<string, unknown>
+      void total_price
+      await supabase.from('orders').update(safeUpdates).eq('id', id)
+    }
     setOrders(prev => prev.map(o =>
       o.id === id ? { ...o, ...updates, updated_at: new Date().toISOString() } : o
     ))
-  }, [])
+  }, [currentUser, supabase])
 
-  const updateSettings = useCallback((updates: Partial<Settings>) => {
+  const updateSettings = useCallback(async (updates: Partial<Settings>) => {
+    if (currentUser && !currentUser.id.startsWith('client-')) {
+      await supabase.from('settings').update(updates).eq('id', settings.id)
+    }
     setSettings(prev => ({ ...prev, ...updates, updated_at: new Date().toISOString() }))
-  }, [])
+  }, [currentUser, supabase, settings.id])
 
-  const addNotification = useCallback((notif: Omit<Notification, 'id' | 'created_at' | 'read'>) => {
+  const addNotification = useCallback(async (notif: Omit<Notification, 'id' | 'created_at' | 'read'>) => {
+    if (currentUser && !currentUser.id.startsWith('client-')) {
+      const { data } = await supabase.from('notifications').insert({
+        user_id: notif.user_id,
+        title: notif.title,
+        message: notif.message,
+        order_id: notif.order_id,
+      }).select().single()
+      if (data) {
+        setNotifications(prev => [data as Notification, ...prev])
+        return
+      }
+    }
     const newNotif: Notification = {
       ...notif,
       id: `notif-${Date.now()}`,
@@ -366,13 +405,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       created_at: new Date().toISOString(),
     }
     setNotifications(prev => [newNotif, ...prev])
-  }, [])
+  }, [currentUser, supabase])
 
-  const markNotificationRead = useCallback((id: string) => {
+  const markNotificationRead = useCallback(async (id: string) => {
+    if (!id.startsWith('notif-')) {
+      await supabase.from('notifications').update({ read: true }).eq('id', id)
+    }
     setNotifications(prev => prev.map(n =>
       n.id === id ? { ...n, read: true } : n
     ))
-  }, [])
+  }, [supabase])
 
   const updatePortfolioSettings = useCallback((updates: Partial<PortfolioSettings>) => {
     setPortfolioSettings((prev: PortfolioSettings) => ({ ...prev, ...updates }))
@@ -436,7 +478,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const sendMessage = useCallback((msgData: Omit<ChatMessage, 'id' | 'created_at' | 'read'>) => {
+  const sendMessage = useCallback(async (msgData: Omit<ChatMessage, 'id' | 'created_at' | 'read'>) => {
+    if (currentUser && !currentUser.id.startsWith('client-')) {
+      const { data } = await supabase.from('messages').insert({
+        sender_id: msgData.sender_id,
+        receiver_id: msgData.receiver_id,
+        content: msgData.content,
+      }).select().single()
+      if (data) {
+        setMessages(prev => [...prev, data as ChatMessage])
+        return
+      }
+    }
     const newMsg: ChatMessage = {
       ...msgData,
       id: `msg-${Date.now()}`,
@@ -444,14 +497,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       created_at: new Date().toISOString(),
     }
     setMessages(prev => [...prev, newMsg])
-  }, [])
+  }, [currentUser, supabase])
 
-  const markMessagesAsRead = useCallback((senderId: string, receiverId: string) => {
+  const markMessagesAsRead = useCallback(async (senderId: string, receiverId: string) => {
+    if (currentUser && !currentUser.id.startsWith('client-')) {
+      await supabase.from('messages').update({ read: true })
+        .eq('sender_id', senderId)
+        .eq('receiver_id', receiverId)
+        .eq('read', false)
+    }
     setMessages(prev => prev.map(m =>
       (m.sender_id === senderId && m.receiver_id === receiverId && !m.read)
         ? { ...m, read: true } : m
     ))
-  }, [])
+  }, [currentUser, supabase])
 
   // Goals
   const addGoal = useCallback((goalData: Omit<Goal, 'id' | 'created_at'>) => {
@@ -495,15 +554,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Mark all notifications read
-  const markAllNotificationsRead = useCallback((userId: string) => {
+  const markAllNotificationsRead = useCallback(async (userId: string) => {
+    if (!userId.startsWith('client-')) {
+      await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false)
+    }
     setNotifications(prev => prev.map(n => n.user_id === userId ? { ...n, read: true } : n))
-  }, [])
+  }, [supabase])
 
   // Update profile
-  const updateProfile = useCallback((id: string, updates: Partial<Profile>) => {
+  const updateProfile = useCallback(async (id: string, updates: Partial<Profile>) => {
+    if (!id.startsWith('client-')) {
+      await supabase.from('profiles').update(updates).eq('id', id)
+    }
     setProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p))
     setCurrentUser(prev => prev && prev.id === id ? { ...prev, ...updates, updated_at: new Date().toISOString() } : prev)
-  }, [])
+  }, [supabase])
 
   return (
     <StoreContext.Provider value={{
