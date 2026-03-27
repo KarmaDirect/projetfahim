@@ -18,7 +18,10 @@
       "Bash(git commit:*)",
       "Bash(grep -r supabase /c/Users/hatim/Desktop/planning/motion-planner/src --include=*.ts --include=*.tsx)",
       "Bash(grep -r \"createClient\\\\|useClient\\\\|initializeApp\" /c/Users/hatim/Desktop/planning/motion-planner/src --include=*.ts --include=*.tsx)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''mailer_autoconfirm:'''', d.get\\(''''mailer_autoconfirm''''\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''mailer_autoconfirm:'''', d.get\\(''''mailer_autoconfirm''''\\)\\)\")",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_98fdc04f675a89743c2058a84499c6f9052de556 npx supabase db query --linked \"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'messages' ORDER BY ordinal_position\" 2>&1)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_98fdc04f675a89743c2058a84499c6f9052de556 npx supabase db query --linked \"ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS user_type text; ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS specialty text; ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS monthly_volume text; ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tools jsonb; ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS project_type text; ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS budget_range text; ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;\" 2>&1)",
+      "Bash(git push:*)"
     ]
   }
 }

@@ -319,14 +319,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         },
       })
       if (!error && data.user) {
-        // Wait briefly for the trigger to create the profile
-        await new Promise(r => setTimeout(r, 500))
+        // Wait for the trigger to create the profile, with retry
+        let profile = null
+        for (let i = 0; i < 3; i++) {
+          await new Promise(r => setTimeout(r, 500))
+          const { data: p } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single()
+          if (p) { profile = p; break }
+        }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single()
+        // Update profile with extra fields (user_type, specialty, phone, etc.)
+        if (profile && extra) {
+          const extraFields: Record<string, unknown> = {}
+          for (const [key, value] of Object.entries(extra)) {
+            if (value !== undefined && !['id', 'email', 'role', 'created_at', 'updated_at'].includes(key)) {
+              extraFields[key] = value
+            }
+          }
+          if (Object.keys(extraFields).length > 0) {
+            await supabase.from('profiles').update(extraFields).eq('id', data.user.id)
+            profile = { ...profile, ...extraFields }
+          }
+        }
 
         const userProfile: Profile = profile ? (profile as Profile) : {
             id: data.user.id,

@@ -29,6 +29,13 @@ create table if not exists public.profiles (
   full_name text not null default '',
   company text default '',
   role text not null default 'client' check (role in ('admin', 'client', 'partner')),
+  user_type text,
+  specialty text,
+  monthly_volume text,
+  tools jsonb,
+  project_type text,
+  budget_range text,
+  phone text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
