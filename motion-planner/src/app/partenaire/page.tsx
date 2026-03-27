@@ -80,13 +80,19 @@ export default function PartenairePage() {
       tools,
       phone,
     }
-    const success = await signup(email, password, fullName, company, extra)
-    if (success) {
-      setTimeout(() => router.push('/dashboard'), 800)
-    } else {
-      setError('Un compte existe déjà avec cet email.')
-      setLoading(false)
+    try {
+      const success = await signup(email, password, fullName, company, extra)
+      if (success) {
+        setTimeout(() => router.push('/dashboard'), 800)
+      } else {
+        setError('Un compte existe déjà avec cet email.')
+        setStep(1)
+      }
+    } catch {
+      setError('Erreur lors de la création du compte. Veuillez réessayer.')
       setStep(1)
+    } finally {
+      setLoading(false)
     }
   }
 

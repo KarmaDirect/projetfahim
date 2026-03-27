@@ -24,11 +24,16 @@ export default function SignupPage() {
     setLoading(true)
     setError('')
 
-    const success = await signup(email, password, fullName, company)
-    if (success) {
-      router.push('/dashboard')
-    } else {
-      setError('Un compte existe déjà avec cet email.')
+    try {
+      const success = await signup(email, password, fullName, company)
+      if (success) {
+        router.push('/dashboard')
+      } else {
+        setError('Un compte existe déjà avec cet email.')
+      }
+    } catch {
+      setError('Erreur lors de la création du compte. Veuillez réessayer.')
+    } finally {
       setLoading(false)
     }
   }

@@ -22,11 +22,16 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const success = await login(email, password)
-    if (success) {
-      router.push('/dashboard')
-    } else {
-      setError('Email ou mot de passe incorrect. Essayez un des comptes de démo ci-dessous.')
+    try {
+      const success = await login(email, password)
+      if (success) {
+        router.push('/dashboard')
+      } else {
+        setError('Email ou mot de passe incorrect. Essayez un des comptes de démo ci-dessous.')
+      }
+    } catch {
+      setError('Erreur de connexion. Veuillez réessayer.')
+    } finally {
       setLoading(false)
     }
   }

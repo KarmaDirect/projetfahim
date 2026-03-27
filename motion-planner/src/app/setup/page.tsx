@@ -104,13 +104,19 @@ export default function SetupPage() {
       ? { user_type: 'partner' as const, specialty, monthly_volume: monthlyVolume, tools, phone }
       : { user_type: 'client_direct' as const, project_type: projectType, budget_range: budgetRange, phone }
 
-    const success = await signup(email, password, fullName, company, extra)
-    if (success) {
-      setTimeout(() => router.push('/dashboard'), 800)
-    } else {
-      setError('Un compte existe déjà avec cet email.')
-      setLoading(false)
+    try {
+      const success = await signup(email, password, fullName, company, extra)
+      if (success) {
+        setTimeout(() => router.push('/dashboard'), 800)
+      } else {
+        setError('Un compte existe déjà avec cet email.')
+        setStep(2)
+      }
+    } catch {
+      setError('Erreur lors de la création du compte. Veuillez réessayer.')
       setStep(2)
+    } finally {
+      setLoading(false)
     }
   }
 

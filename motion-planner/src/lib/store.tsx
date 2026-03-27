@@ -174,50 +174,56 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     // Try Supabase auth first
+    let supabaseAvailable = true
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (!error) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
+      const { error, data } = await supabase.auth.signInWithPassword({ email, password })
+      if (!error && data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
 
-          if (profile) {
-            setCurrentUser(profile as Profile)
-          } else {
-            setCurrentUser({
-              id: user.id,
-              email: user.email || '',
-              full_name: user.user_metadata?.full_name || '',
-              company: user.user_metadata?.company || '',
-              role: user.user_metadata?.role || 'client',
-              created_at: user.created_at,
-              updated_at: user.created_at,
-            })
-          }
-          return true
+        if (profile) {
+          setCurrentUser(profile as Profile)
+        } else {
+          setCurrentUser({
+            id: data.user.id,
+            email: data.user.email || '',
+            full_name: data.user.user_metadata?.full_name || '',
+            company: data.user.user_metadata?.company || '',
+            role: data.user.user_metadata?.role || 'client',
+            created_at: data.user.created_at,
+            updated_at: data.user.created_at,
+          })
         }
+        return true
+      }
+      // Supabase responded but credentials are wrong — don't fallback to mock
+      if (error && error.message?.includes('Invalid login credentials')) {
+        return false
       }
     } catch {
-      // Supabase not available, fall through to mock
+      // Supabase not reachable — allow mock fallback
+      supabaseAvailable = false
     }
 
-    // Fallback to mock profiles
-    const user = profiles.find(p => p.email === email)
-    if (user) {
-      setCurrentUser(user)
-      return true
+    // Fallback to mock profiles only if Supabase is not available
+    if (!supabaseAvailable) {
+      const user = profiles.find(p => p.email === email)
+      if (user) {
+        setCurrentUser(user)
+        return true
+      }
     }
     return false
   }, [profiles, supabase])
 
   const signup = useCallback(async (email: string, password: string, fullName: string, company: string, extra?: Partial<Profile>): Promise<boolean> => {
     // Try Supabase auth first
+    let supabaseAvailable = true
     try {
-      const { error } = await supabase.auth.signUp({
+      const { error, data } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -229,51 +235,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           },
         },
       })
-      if (!error) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
+      if (!error && data.user) {
+        // Wait briefly for the trigger to create the profile
+        await new Promise(r => setTimeout(r, 500))
 
-          if (profile) {
-            setCurrentUser(profile as Profile)
-          } else {
-            setCurrentUser({
-              id: user.id,
-              email: user.email || '',
-              full_name: fullName,
-              company,
-              role: 'client',
-              created_at: user.created_at,
-              updated_at: user.created_at,
-              ...extra,
-            })
-          }
-          return true
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
+
+        if (profile) {
+          setCurrentUser(profile as Profile)
+        } else {
+          setCurrentUser({
+            id: data.user.id,
+            email: data.user.email || '',
+            full_name: fullName,
+            company,
+            role: 'client',
+            created_at: data.user.created_at,
+            updated_at: data.user.created_at,
+            ...extra,
+          })
         }
+        return true
       }
+      if (error) return false
     } catch {
-      // Supabase not available, fall through to mock
+      supabaseAvailable = false
     }
 
-    // Fallback to mock
-    if (profiles.find(p => p.email === email)) return false
-    const newProfile: Profile = {
-      id: `client-${Date.now()}`,
-      email,
-      full_name: fullName,
-      company,
-      role: 'client',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...extra,
+    // Fallback to mock only if Supabase is not available
+    if (!supabaseAvailable) {
+      if (profiles.find(p => p.email === email)) return false
+      const newProfile: Profile = {
+        id: `client-${Date.now()}`,
+        email,
+        full_name: fullName,
+        company,
+        role: 'client',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...extra,
+      }
+      setProfiles(prev => [...prev, newProfile])
+      setCurrentUser(newProfile)
+      return true
     }
-    setProfiles(prev => [...prev, newProfile])
-    setCurrentUser(newProfile)
-    return true
+    return false
   }, [profiles, supabase])
 
   const logout = useCallback(async () => {
