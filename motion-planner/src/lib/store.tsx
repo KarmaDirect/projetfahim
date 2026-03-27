@@ -215,7 +215,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               updated_at: user.created_at,
             }
           setCurrentUser(userProfile)
-          await loadSupabaseData(user.id, userProfile.role)
+          try {
+            await loadSupabaseData(user.id, userProfile.role)
+          } catch (loadErr) {
+            console.error('[Fahim AE] loadSupabaseData error (non-blocking):', loadErr)
+          }
         }
       } catch (err) {
         console.error('[Fahim AE] Session restore error:', err)
@@ -260,7 +264,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           updated_at: session.user.created_at,
         }
         setCurrentUser(userProfile)
-        await loadSupabaseData(session.user.id, userProfile.role)
+        try {
+          await loadSupabaseData(session.user.id, userProfile.role)
+        } catch (loadErr) {
+          console.error('[Fahim AE] onAuthStateChange loadSupabaseData error:', loadErr)
+        }
       }
     })
 
@@ -320,7 +328,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             updated_at: data.user.created_at,
           }
         setCurrentUser(userProfile)
-        await loadSupabaseData(data.user.id, userProfile.role)
+        try {
+          await loadSupabaseData(data.user.id, userProfile.role)
+        } catch (loadErr) {
+          console.error('[Fahim AE] loadSupabaseData error (non-blocking):', loadErr)
+        }
         return true
       }
       if (error) {
@@ -332,6 +344,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         throw err
       }
       // Supabase not reachable — allow mock fallback
+      console.error('[Fahim AE] Login error, falling back to mock:', err)
       const user = profiles.find(p => p.email === email)
       if (user) {
         setCurrentUser(user)
