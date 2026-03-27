@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
-import type { Profile, Order, Settings, Notification, ChatMessage, PortfolioBlock, PortfolioBlockType, Goal, Review, DayOff, WorkSchedule } from './types'
+import type { Profile, Order, Settings, Notification, ChatMessage, PortfolioBlock, PortfolioBlockType, Goal, Review, DayOff, WorkSchedule, OrderAttachment } from './types'
 import { MOCK_PROFILES, MOCK_ORDERS, MOCK_SETTINGS, MOCK_NOTIFICATIONS, MOCK_PORTFOLIO_SETTINGS, MOCK_PORTFOLIO_PROJECTS, MOCK_MESSAGES, MOCK_PORTFOLIO_BLOCKS, MOCK_GOALS, MOCK_REVIEWS, MOCK_DAYS_OFF, MOCK_WORK_SCHEDULE } from './mock-data'
 import type { PortfolioProject, PortfolioSettings } from './types'
 import { getDefaultConfig } from './block-registry'
@@ -22,7 +22,7 @@ interface StoreContextType {
 
   // Orders
   orders: Order[]
-  addOrder: (order: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'total_price' | 'status' | 'scheduled_start' | 'scheduled_end' | 'admin_notes'>) => void
+  addOrder: (order: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'total_price' | 'status' | 'scheduled_start' | 'scheduled_end' | 'admin_notes'>) => Promise<Order | null>
   updateOrder: (id: string, updates: Partial<Order>) => void
 
   // Settings
@@ -83,6 +83,11 @@ interface StoreContextType {
 
   // Profile
   updateProfile: (id: string, updates: Partial<Profile>) => void
+
+  // Order Attachments
+  orderAttachments: OrderAttachment[]
+  addOrderAttachment: (orderId: string, file?: File, url?: string, fileName?: string) => Promise<void>
+  removeOrderAttachment: (id: string) => Promise<void>
 }
 
 const StoreContext = createContext<StoreContextType | null>(null)
@@ -114,6 +119,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [reviews, setReviews] = useState<Review[]>(MOCK_REVIEWS)
   const [daysOff, setDaysOff] = useState<DayOff[]>(MOCK_DAYS_OFF)
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule[]>(MOCK_WORK_SCHEDULE)
+  const [orderAttachments, setOrderAttachments] = useState<OrderAttachment[]>([])
 
   const supabase = createClient()
 
@@ -186,6 +192,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } else {
       setWorkSchedule([])
     }
+
+    // Load order attachments
+    const { data: dbAttachments } = await supabase.from('order_attachments').select('*').order('created_at', { ascending: false })
+    if (dbAttachments) {
+      setOrderAttachments(dbAttachments as OrderAttachment[])
+    } else {
+      setOrderAttachments([])
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -237,6 +251,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setPortfolioSettings(MOCK_PORTFOLIO_SETTINGS)
         setPortfolioProjects(MOCK_PORTFOLIO_PROJECTS)
         setPortfolioBlocks(MOCK_PORTFOLIO_BLOCKS)
+        setOrderAttachments([])
       } else if (event === 'SIGNED_IN' && session?.user) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -419,6 +434,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setPortfolioSettings(MOCK_PORTFOLIO_SETTINGS)
     setPortfolioProjects(MOCK_PORTFOLIO_PROJECTS)
     setPortfolioBlocks(MOCK_PORTFOLIO_BLOCKS)
+    setOrderAttachments([])
   }, [supabase])
 
   const switchUser = useCallback((userId: string) => {
@@ -426,7 +442,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (user) setCurrentUser(user)
   }, [profiles])
 
-  const addOrder = useCallback(async (orderData: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'total_price' | 'status' | 'scheduled_start' | 'scheduled_end' | 'admin_notes'>) => {
+  const addOrder = useCallback(async (orderData: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'total_price' | 'status' | 'scheduled_start' | 'scheduled_end' | 'admin_notes'>): Promise<Order | null> => {
     // Try Supabase first
     if (currentUser && !currentUser.id.startsWith('client-')) {
       const { data, error } = await supabase.from('orders').insert({
@@ -440,8 +456,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         deadline: orderData.deadline,
       }).select().single()
       if (!error && data) {
-        setOrders(prev => [data as Order, ...prev])
-        return
+        const order = data as Order
+        setOrders(prev => [order, ...prev])
+        return order
       }
     }
     // Fallback to local
@@ -457,6 +474,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updated_at: new Date().toISOString(),
     }
     setOrders(prev => [newOrder, ...prev])
+    return newOrder
   }, [currentUser, supabase])
 
   const updateOrder = useCallback(async (id: string, updates: Partial<Order>) => {
@@ -663,6 +681,67 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCurrentUser(prev => prev && prev.id === id ? { ...prev, ...updates, updated_at: new Date().toISOString() } : prev)
   }, [supabase])
 
+  // Order Attachments
+  const addOrderAttachment = useCallback(async (orderId: string, file?: File, url?: string, fileName?: string) => {
+    let fileUrl = url || ''
+    let fileType: 'image' | 'link' | 'document' = 'link'
+    let fileSize: number | null = null
+    let finalFileName = fileName || url || ''
+
+    if (file) {
+      finalFileName = file.name
+      fileSize = file.size
+      const ext = file.name.split('.').pop()?.toLowerCase() || ''
+      fileType = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext) ? 'image' : 'document'
+
+      const path = `${orderId}/${Date.now()}_${file.name}`
+      if (currentUser && !currentUser.id.startsWith('client-')) {
+        const { error: uploadError } = await supabase.storage.from('order-attachments').upload(path, file)
+        if (!uploadError) {
+          const { data: publicData } = supabase.storage.from('order-attachments').getPublicUrl(path)
+          fileUrl = publicData.publicUrl
+        }
+      } else {
+        fileUrl = URL.createObjectURL(file)
+      }
+    }
+
+    if (currentUser && !currentUser.id.startsWith('client-')) {
+      const { data, error } = await supabase.from('order_attachments').insert({
+        order_id: orderId,
+        uploaded_by: currentUser.id,
+        file_name: finalFileName,
+        file_url: fileUrl,
+        file_type: fileType,
+        file_size: fileSize,
+      }).select().single()
+      if (!error && data) {
+        setOrderAttachments(prev => [data as OrderAttachment, ...prev])
+        return
+      }
+    }
+
+    // Fallback local
+    const newAttachment: OrderAttachment = {
+      id: `attach-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      order_id: orderId,
+      uploaded_by: currentUser?.id || '',
+      file_name: finalFileName,
+      file_url: fileUrl,
+      file_type: fileType,
+      file_size: fileSize,
+      created_at: new Date().toISOString(),
+    }
+    setOrderAttachments(prev => [newAttachment, ...prev])
+  }, [currentUser, supabase])
+
+  const removeOrderAttachment = useCallback(async (id: string) => {
+    if (!id.startsWith('attach-')) {
+      await supabase.from('order_attachments').delete().eq('id', id)
+    }
+    setOrderAttachments(prev => prev.filter(a => a.id !== id))
+  }, [supabase])
+
   return (
     <StoreContext.Provider value={{
       darkMode, toggleDarkMode,
@@ -680,6 +759,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       daysOff, addDayOff, removeDayOff, workSchedule, updateWorkSchedule,
       markAllNotificationsRead,
       updateProfile,
+      orderAttachments, addOrderAttachment, removeOrderAttachment,
     }}>
       {children}
     </StoreContext.Provider>

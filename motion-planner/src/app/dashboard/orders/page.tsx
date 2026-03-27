@@ -6,11 +6,11 @@ import StatusBadge from '@/components/StatusBadge'
 import OrderTimeline from '@/components/OrderTimeline'
 import OrderActions from '@/components/OrderActions'
 import Link from 'next/link'
-import { ClipboardList, PlusCircle, Film } from 'lucide-react'
+import { ClipboardList, PlusCircle, Film, Link2, ExternalLink } from 'lucide-react'
 import type { Profile } from '@/lib/types'
 
 export default function OrdersPage() {
-  const { currentUser, orders, profiles } = useStore()
+  const { currentUser, orders, profiles, orderAttachments } = useStore()
   if (!currentUser) return null
 
   const isAdmin = currentUser.role === 'admin'
@@ -106,6 +106,49 @@ export default function OrdersPage() {
                     <p className="text-sm text-[#1F2937] dark:text-white font-medium leading-relaxed">{order.admin_notes}</p>
                   </div>
                 )}
+
+                {/* Order Attachments */}
+                {(() => {
+                  const attachments = orderAttachments.filter(a => a.order_id === order.id)
+                  const imageAttachments = attachments.filter(a => a.file_type === 'image')
+                  const linkAttachments = attachments.filter(a => a.file_type === 'link')
+                  if (attachments.length === 0) return null
+                  return (
+                    <div className="mt-4 bg-gray-50/40 dark:bg-[#23262F]/40 rounded-[16px] p-4 border border-gray-100/50 dark:border-[#23262F]">
+                      <p className="text-[10px] font-bold text-primary tracking-[0.15em] uppercase mb-3">Pièces jointes</p>
+                      {imageAttachments.length > 0 && (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 mb-3">
+                          {imageAttachments.map(att => (
+                            <a key={att.id} href={att.file_url} target="_blank" rel="noopener noreferrer" className="group relative aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-[#23262F] hover:border-gray-400 dark:hover:border-gray-500 transition">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={att.file_url} alt={att.file_name} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
+                                <ExternalLink className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {linkAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {linkAttachments.map(att => (
+                            <a
+                              key={att.id}
+                              href={att.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#181A20] rounded-lg border border-gray-200 dark:border-[#23262F] hover:border-gray-400 dark:hover:border-gray-500 transition text-xs font-medium text-gray-600 dark:text-gray-300"
+                            >
+                              <Link2 className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate max-w-[200px]">{att.file_name}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0 text-gray-400" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {isAdmin && (order.status === 'pending' || order.status === 'in_progress') && (
                   <div className="mt-6 pt-5 border-t border-gray-100 dark:border-[#23262F]">

@@ -3,22 +3,28 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import { Search, Send, Clock, Check, CheckCheck } from 'lucide-react'
+import { format } from 'date-fns'
 import type { Profile, ChatMessage } from '@/lib/types'
 
 export default function MessagesPage() {
-  const { currentUser, profiles, messages, sendMessage, markMessagesAsRead } = useStore()
+  const { currentUser, profiles, messages, sendMessage, markMessagesAsRead, daysOff } = useStore()
   
   const [activeUserId, setActiveUserId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [newMessage, setNewMessage] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Determine contacts
+  // Determine contacts: admin sees clients + partners, clients/partners see admin
   const contacts = profiles.filter(p => {
     if (p.id === currentUser?.id) return false
-    if (currentUser?.role === 'admin') return p.role === 'client'
+    if (currentUser?.role === 'admin') return p.role === 'client' || p.role === 'partner'
     return p.role === 'admin'
   })
+
+  // Admin availability: check if today is a day off
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const isAdminDayOff = daysOff.some(d => d.date === todayStr)
+  const isAdminAvailable = !isAdminDayOff
 
   // Filter contacts by search
   const filteredContacts = contacts.filter(c => 
@@ -116,12 +122,21 @@ export default function MessagesPage() {
                     className={`p-4 border-b border-[#F3F4F6] dark:border-[#23262F] cursor-pointer transition-colors ${activeUserId === contact.id ? 'bg-[#F3F4F6] dark:bg-[#23262F] border-l-4 border-l-[#4B5563]' : 'bg-white dark:bg-[#181A20] hover:bg-gray-50 dark:hover:bg-[#23262F] border-l-4 border-l-transparent'}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-linear-to-br from-primary to-[#6B7280] flex items-center justify-center text-white font-bold text-lg shrink-0 relative shadow-sm">
-                        {contact.full_name.charAt(0)}
+                      <div className="w-12 h-12 rounded-full shrink-0 relative shadow-sm">
+                        {contact.avatar_url ? (
+                          <img src={contact.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-linear-to-br from-primary to-[#6B7280] flex items-center justify-center text-white font-bold text-lg">
+                            {contact.full_name.charAt(0)}
+                          </div>
+                        )}
                         {unreadCount > 0 && (
                           <div className="absolute -top-1 -right-1 w-5 h-5 bg-[#EF4444] border-2 border-white dark:border-[#181A20] rounded-full flex items-center justify-center text-[10px] text-white font-bold">
                             {unreadCount}
                           </div>
+                        )}
+                        {contact.role === 'admin' && currentUser.role !== 'admin' && (
+                          <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#181A20] ${isAdminAvailable ? 'bg-emerald-400' : 'bg-gray-300 dark:bg-gray-600'}`} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -154,12 +169,24 @@ export default function MessagesPage() {
               {/* Chat Header */}
               <div className="h-[80px] shrink-0 border-b border-[#F3F4F6] dark:border-[#23262F] px-6 flex items-center justify-between bg-white dark:bg-[#181A20] z-10 relative">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-linear-to-br from-primary to-[#6B7280] flex items-center justify-center text-white font-bold text-lg ring-4 ring-[#F3F4F6] dark:ring-[#23262F]">
-                    {activeUser.full_name.charAt(0)}
-                  </div>
+                  {activeUser.avatar_url ? (
+                    <img src={activeUser.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover ring-4 ring-[#F3F4F6] dark:ring-[#23262F]" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-linear-to-br from-primary to-[#6B7280] flex items-center justify-center text-white font-bold text-lg ring-4 ring-[#F3F4F6] dark:ring-[#23262F]">
+                      {activeUser.full_name.charAt(0)}
+                    </div>
+                  )}
                   <div>
                     <h2 className="text-lg font-bold text-[#1F2937] dark:text-white capitalize">{activeUser.full_name}</h2>
-                    <p className="text-[11px] font-bold text-primary uppercase tracking-widest">{activeUser.company} {activeUser.user_type === 'partner' ? '• Partenaire' : ''}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] font-bold text-primary uppercase tracking-widest">{activeUser.company} {activeUser.user_type === 'partner' ? '• Partenaire' : ''}</p>
+                      {activeUser.role === 'admin' && currentUser.role !== 'admin' && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isAdminAvailable ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isAdminAvailable ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                          {isAdminAvailable ? 'Disponible' : 'Indisponible'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

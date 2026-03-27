@@ -34,6 +34,18 @@ export interface Order {
   created_at: string
   updated_at: string
   profiles?: Profile
+  attachments?: OrderAttachment[]
+}
+
+export interface OrderAttachment {
+  id: string
+  order_id: string
+  uploaded_by: string
+  file_name: string
+  file_url: string
+  file_type: 'image' | 'link' | 'document'
+  file_size: number | null
+  created_at: string
 }
 
 export interface Settings {

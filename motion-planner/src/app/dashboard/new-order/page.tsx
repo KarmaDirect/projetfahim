@@ -1,11 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
 import { formatCurrency, calculateProductionDays, calculatePrice } from '@/lib/utils'
 import OrderTimeline from '@/components/OrderTimeline'
-import { Send, Loader2, Calculator } from 'lucide-react'
+import { Send, Loader2, Calculator, ImagePlus, Link2, X } from 'lucide-react'
+
+interface PendingAttachment {
+  id: string
+  type: 'image' | 'link'
+  file?: File
+  url?: string
+  fileName: string
+  preview?: string
+}
 
 export default function NewOrderPage() {
   const [clientName, setClientName] = useState('')
@@ -15,8 +24,11 @@ export default function NewOrderPage() {
   const [deadline, setDeadline] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
+  const [linkInput, setLinkInput] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { currentUser, settings, addOrder } = useStore()
+  const { currentUser, settings, addOrder, addOrderAttachment } = useStore()
   const router = useRouter()
 
   if (!currentUser) return null
@@ -24,13 +36,47 @@ export default function NewOrderPage() {
   const price = calculatePrice(seconds, settings.price_per_second)
   const productionDays = calculateProductionDays(seconds, settings.seconds_per_day)
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files) return
+    const newAttachments: PendingAttachment[] = Array.from(files).map(file => ({
+      id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'image' as const,
+      file,
+      fileName: file.name,
+      preview: URL.createObjectURL(file),
+    }))
+    setPendingAttachments(prev => [...prev, ...newAttachments])
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  function handleAddLink() {
+    const url = linkInput.trim()
+    if (!url) return
+    setPendingAttachments(prev => [...prev, {
+      id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'link',
+      url,
+      fileName: url,
+    }])
+    setLinkInput('')
+  }
+
+  function handleRemovePending(id: string) {
+    setPendingAttachments(prev => {
+      const item = prev.find(a => a.id === id)
+      if (item?.preview) URL.revokeObjectURL(item.preview)
+      return prev.filter(a => a.id !== id)
+    })
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (seconds <= 0) return
 
     setLoading(true)
 
-    addOrder({
+    const order = await addOrder({
       client_id: currentUser!.id,
       client_name: clientName,
       project_name: projectName,
@@ -40,6 +86,17 @@ export default function NewOrderPage() {
       production_days: productionDays,
       deadline: deadline || null,
     })
+
+    // Upload all pending attachments
+    if (order) {
+      for (const attachment of pendingAttachments) {
+        if (attachment.type === 'image' && attachment.file) {
+          await addOrderAttachment(order.id, attachment.file)
+        } else if (attachment.type === 'link' && attachment.url) {
+          await addOrderAttachment(order.id, undefined, attachment.url, attachment.fileName)
+        }
+      }
+    }
 
     setSuccess(true)
     setTimeout(() => router.push('/dashboard/orders'), 1500)
@@ -98,6 +155,79 @@ export default function NewOrderPage() {
                 className="w-full px-3 py-2.5 border border-gray-300 dark:border-[#23262F] dark:bg-[#23262F] dark:text-white rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 outline-none transition resize-none"
                 placeholder="Décrivez votre besoin en motion design..."
               />
+            </div>
+
+            {/* Attachments section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Références & Images</label>
+
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFilesSelected}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 dark:border-[#23262F] dark:bg-[#23262F] dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-[#23262F]/80 transition text-sm font-medium cursor-pointer"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  Ajouter des images
+                </button>
+
+                <div className="flex flex-1 gap-2">
+                  <input
+                    type="text"
+                    value={linkInput}
+                    onChange={(e) => setLinkInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddLink() } }}
+                    className="flex-1 px-3 py-2.5 border border-gray-300 dark:border-[#23262F] dark:bg-[#23262F] dark:text-white rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 outline-none transition text-sm"
+                    placeholder="https://exemple.com/reference"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddLink}
+                    className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-300 dark:border-[#23262F] dark:bg-[#23262F] dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-[#23262F]/80 transition text-sm font-medium cursor-pointer"
+                  >
+                    <Link2 className="w-4 h-4" />
+                    Ajouter
+                  </button>
+                </div>
+              </div>
+
+              {pendingAttachments.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {pendingAttachments.map((att) => (
+                    <div key={att.id} className="relative group bg-gray-50 dark:bg-[#23262F] rounded-xl border border-gray-200 dark:border-[#23262F] overflow-hidden">
+                      {att.type === 'image' && att.preview ? (
+                        <div className="aspect-square">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={att.preview} alt={att.fileName} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="aspect-square flex flex-col items-center justify-center p-3 text-center">
+                          <Link2 className="w-6 h-6 text-gray-400 dark:text-gray-500 mb-2" />
+                          <span className="text-xs text-gray-500 dark:text-gray-400 break-all line-clamp-3">{att.fileName}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePending(att.id)}
+                        className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5 text-white" />
+                      </button>
+                      <div className="px-2 py-1.5 border-t border-gray-200 dark:border-[#2A2D35]">
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{att.fileName}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -35,6 +35,7 @@ export default function CalendarView({ orders, daysOff, workSchedule, isAdmin, o
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [dayOffForm, setDayOffForm] = useState({ date: '', label: '' })
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+  const [showReadOnlyScheduleModal, setShowReadOnlyScheduleModal] = useState(false)
 
   const today = startOfDay(new Date())
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
@@ -155,7 +156,7 @@ export default function CalendarView({ orders, daysOff, workSchedule, isAdmin, o
         </div>
 
         <div className="flex items-center gap-3">
-          {isAdmin && (
+          {isAdmin ? (
             <>
               <button
                 onClick={() => setShowScheduleModal(true)}
@@ -172,6 +173,14 @@ export default function CalendarView({ orders, daysOff, workSchedule, isAdmin, o
                 Jour off
               </button>
             </>
+          ) : (
+            <button
+              onClick={() => setShowReadOnlyScheduleModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-[#23262F] border border-gray-200 dark:border-[#2C2F38] rounded-[14px] hover:bg-gray-100 dark:hover:bg-[#2C2F38] transition cursor-pointer"
+            >
+              <Clock size={16} />
+              Voir les horaires
+            </button>
           )}
 
           <div className="flex bg-gray-100 dark:bg-[#23262F] rounded-[14px] p-1">
@@ -464,8 +473,10 @@ export default function CalendarView({ orders, daysOff, workSchedule, isAdmin, o
           Jour off
         </span>
         <span className="flex items-center gap-2">
-          <span className="w-3.5 h-3.5 rounded bg-gray-50 dark:bg-[#12131A] border border-gray-200 dark:border-[#23262F]" />
-          Non travaillé
+          <span className="w-3.5 h-3.5 rounded bg-gray-50 dark:bg-[#12131A] border border-gray-200 dark:border-[#23262F] relative overflow-hidden">
+            <span className="absolute inset-0 opacity-[0.15] dark:opacity-[0.25]" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, currentColor 2px, currentColor 3px)' }} />
+          </span>
+          Non travaillé (hachuré)
         </span>
         <span className="flex items-center gap-2">
           <span className="w-3.5 h-3.5 rounded ring-2 ring-[#4B5563]/30 dark:ring-white/20" />
@@ -537,6 +548,52 @@ export default function CalendarView({ orders, daysOff, workSchedule, isAdmin, o
                 Ajouter
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== READ-ONLY SCHEDULE MODAL (non-admin) ===== */}
+      {showReadOnlyScheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#181A20] rounded-[24px] p-8 w-full max-w-lg shadow-2xl mx-4 border border-transparent dark:border-[#23262F]">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-[#1F2937] dark:text-white">Horaires de travail</h2>
+              <button onClick={() => setShowReadOnlyScheduleModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-[#23262F] rounded-full cursor-pointer">
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {workSchedule
+                .slice()
+                .sort((a, b) => {
+                  const order = [1, 2, 3, 4, 5, 6, 0]
+                  return order.indexOf(a.day_of_week) - order.indexOf(b.day_of_week)
+                })
+                .map(ws => (
+                <div key={ws.id} className={`flex items-center gap-4 p-3.5 rounded-[16px] transition-colors ${ws.is_working ? 'bg-white dark:bg-[#181A20]' : 'bg-gray-50 dark:bg-[#12131A]'}`}>
+                  <div className={`w-3 h-3 rounded-full shrink-0 ${ws.is_working ? 'bg-emerald-400' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                  <span className={`text-sm font-bold w-24 ${ws.is_working ? 'text-[#1F2937] dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
+                    {DAY_NAMES[ws.day_of_week]}
+                  </span>
+                  {ws.is_working ? (
+                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">{ws.start_hour} — {ws.end_hour}</span>
+                  ) : (
+                    <span className="text-sm text-gray-400 dark:text-gray-600 italic">Non travaillé</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 p-4 bg-gray-50 dark:bg-[#12131A] rounded-[16px]">
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
+                Ces horaires indiquent les plages de disponibilité pour la production. Les jours marqués en rouge dans le calendrier correspondent aux jours off.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowReadOnlyScheduleModal(false)}
+              className="w-full mt-4 py-3.5 rounded-[16px] bg-[#1F2937] dark:bg-white text-white dark:text-[#1F2937] font-bold text-sm hover:bg-[#111827] dark:hover:bg-gray-200 transition-colors cursor-pointer"
+            >
+              Fermer
+            </button>
           </div>
         </div>
       )}
