@@ -17,15 +17,16 @@ export default function LoginPage() {
   const { login, profiles } = useStore()
   const router = useRouter()
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
 
-    if (login(email, password)) {
+    const success = await login(email, password)
+    if (success) {
       router.push('/dashboard')
     } else {
-      setError('Email non trouvé. Essayez un des comptes de démo ci-dessous.')
+      setError('Email ou mot de passe incorrect. Essayez un des comptes de démo ci-dessous.')
       setLoading(false)
     }
   }

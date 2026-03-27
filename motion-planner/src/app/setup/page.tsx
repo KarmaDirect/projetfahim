@@ -96,7 +96,7 @@ export default function SetupPage() {
     if (step > 1) setStep((step - 1) as Step)
   }
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     setLoading(true)
     setError('')
 
@@ -104,7 +104,8 @@ export default function SetupPage() {
       ? { user_type: 'partner' as const, specialty, monthly_volume: monthlyVolume, tools, phone }
       : { user_type: 'client_direct' as const, project_type: projectType, budget_range: budgetRange, phone }
 
-    if (signup(email, password, fullName, company, extra)) {
+    const success = await signup(email, password, fullName, company, extra)
+    if (success) {
       setTimeout(() => router.push('/dashboard'), 800)
     } else {
       setError('Un compte existe déjà avec cet email.')

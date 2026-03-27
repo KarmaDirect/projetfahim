@@ -70,7 +70,7 @@ export default function PartenairePage() {
     }
   }
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     setLoading(true)
     setError('')
     const extra = {
@@ -80,7 +80,8 @@ export default function PartenairePage() {
       tools,
       phone,
     }
-    if (signup(email, password, fullName, company, extra)) {
+    const success = await signup(email, password, fullName, company, extra)
+    if (success) {
       setTimeout(() => router.push('/dashboard'), 800)
     } else {
       setError('Un compte existe déjà avec cet email.')

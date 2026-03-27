@@ -19,12 +19,13 @@ export default function SignupPage() {
   const { signup } = useStore()
   const router = useRouter()
 
-  function handleSignup(e: React.FormEvent) {
+  async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
 
-    if (signup(email, password, fullName, company)) {
+    const success = await signup(email, password, fullName, company)
+    if (success) {
       router.push('/dashboard')
     } else {
       setError('Un compte existe déjà avec cet email.')

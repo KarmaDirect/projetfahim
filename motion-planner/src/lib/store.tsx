@@ -1,10 +1,11 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { Profile, Order, Settings, Notification, ChatMessage, PortfolioBlock, PortfolioBlockType, Goal, Review, DayOff, WorkSchedule } from './types'
 import { MOCK_PROFILES, MOCK_ORDERS, MOCK_SETTINGS, MOCK_NOTIFICATIONS, MOCK_PORTFOLIO_SETTINGS, MOCK_PORTFOLIO_PROJECTS, MOCK_MESSAGES, MOCK_PORTFOLIO_BLOCKS, MOCK_GOALS, MOCK_REVIEWS, MOCK_DAYS_OFF, MOCK_WORK_SCHEDULE } from './mock-data'
 import type { PortfolioProject, PortfolioSettings } from './types'
 import { getDefaultConfig } from './block-registry'
+import { createClient } from './supabase/client'
 
 interface StoreContextType {
   // Theme
@@ -13,9 +14,10 @@ interface StoreContextType {
 
   // Auth
   currentUser: Profile | null
-  login: (email: string, password: string) => boolean
-  signup: (email: string, password: string, fullName: string, company: string, extra?: Partial<Profile>) => boolean
-  logout: () => void
+  authLoading: boolean
+  login: (email: string, password: string) => Promise<boolean>
+  signup: (email: string, password: string, fullName: string, company: string, extra?: Partial<Profile>) => Promise<boolean>
+  logout: () => Promise<void>
   switchUser: (userId: string) => void
 
   // Orders
@@ -87,6 +89,7 @@ const StoreContext = createContext<StoreContextType | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [darkMode, setDarkMode] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
 
   const toggleDarkMode = useCallback(() => {
     setDarkMode(prev => {
@@ -112,16 +115,151 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [daysOff, setDaysOff] = useState<DayOff[]>(MOCK_DAYS_OFF)
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule[]>(MOCK_WORK_SCHEDULE)
 
-  const login = useCallback((email: string, _password: string) => {
+  const supabase = createClient()
+
+  // Restore session on mount
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+          if (profile) {
+            setCurrentUser(profile as Profile)
+          } else {
+            // Fallback: create profile from auth data
+            setCurrentUser({
+              id: user.id,
+              email: user.email || '',
+              full_name: user.user_metadata?.full_name || '',
+              company: user.user_metadata?.company || '',
+              role: user.user_metadata?.role || 'client',
+              created_at: user.created_at,
+              updated_at: user.created_at,
+            })
+          }
+        }
+      } catch {
+        // Supabase not configured or network error — continue with mock mode
+      } finally {
+        setAuthLoading(false)
+      }
+    }
+    restoreSession()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null)
+      } else if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+
+        if (profile) {
+          setCurrentUser(profile as Profile)
+        }
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    // Try Supabase auth first
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (!error) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+          if (profile) {
+            setCurrentUser(profile as Profile)
+          } else {
+            setCurrentUser({
+              id: user.id,
+              email: user.email || '',
+              full_name: user.user_metadata?.full_name || '',
+              company: user.user_metadata?.company || '',
+              role: user.user_metadata?.role || 'client',
+              created_at: user.created_at,
+              updated_at: user.created_at,
+            })
+          }
+          return true
+        }
+      }
+    } catch {
+      // Supabase not available, fall through to mock
+    }
+
+    // Fallback to mock profiles
     const user = profiles.find(p => p.email === email)
     if (user) {
       setCurrentUser(user)
       return true
     }
     return false
-  }, [profiles])
+  }, [profiles, supabase])
 
-  const signup = useCallback((email: string, _password: string, fullName: string, company: string, extra?: Partial<Profile>) => {
+  const signup = useCallback(async (email: string, password: string, fullName: string, company: string, extra?: Partial<Profile>): Promise<boolean> => {
+    // Try Supabase auth first
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            company,
+            role: 'client',
+            ...extra,
+          },
+        },
+      })
+      if (!error) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+          if (profile) {
+            setCurrentUser(profile as Profile)
+          } else {
+            setCurrentUser({
+              id: user.id,
+              email: user.email || '',
+              full_name: fullName,
+              company,
+              role: 'client',
+              created_at: user.created_at,
+              updated_at: user.created_at,
+              ...extra,
+            })
+          }
+          return true
+        }
+      }
+    } catch {
+      // Supabase not available, fall through to mock
+    }
+
+    // Fallback to mock
     if (profiles.find(p => p.email === email)) return false
     const newProfile: Profile = {
       id: `client-${Date.now()}`,
@@ -136,11 +274,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProfiles(prev => [...prev, newProfile])
     setCurrentUser(newProfile)
     return true
-  }, [profiles])
+  }, [profiles, supabase])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // ignore
+    }
     setCurrentUser(null)
-  }, [])
+  }, [supabase])
 
   const switchUser = useCallback((userId: string) => {
     const user = profiles.find(p => p.id === userId)
@@ -322,7 +465,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <StoreContext.Provider value={{
       darkMode, toggleDarkMode,
-      currentUser, login, signup, logout, switchUser,
+      currentUser, authLoading, login, signup, logout, switchUser,
       orders, addOrder, updateOrder,
       settings, updateSettings,
       notifications, addNotification, markNotificationRead,

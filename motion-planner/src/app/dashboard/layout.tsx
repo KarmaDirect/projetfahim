@@ -11,15 +11,23 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { currentUser } = useStore()
+  const { currentUser, authLoading } = useStore()
   const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!authLoading && !currentUser) {
       router.replace('/login')
     }
-  }, [currentUser, router])
+  }, [currentUser, authLoading, router])
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#FAFBFC] dark:bg-[#0F1117]">
+        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   if (!currentUser) return null
 
