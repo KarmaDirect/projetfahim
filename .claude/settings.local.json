@@ -14,7 +14,10 @@
       "Bash(git init:*)",
       "Bash(git rm:*)",
       "Bash(rm -rf motion-planner/.git remotion-skills/.git)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(grep -r supabase /c/Users/hatim/Desktop/planning/motion-planner/src --include=*.ts --include=*.tsx)",
+      "Bash(grep -r \"createClient\\\\|useClient\\\\|initializeApp\" /c/Users/hatim/Desktop/planning/motion-planner/src --include=*.ts --include=*.tsx)"
     ]
   }
 }
