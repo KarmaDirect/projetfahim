@@ -1,13 +1,21 @@
 import { createBrowserClient } from '@supabase/ssr'
 
-let client: ReturnType<typeof createBrowserClient> | null = null
+const SINGLETON_KEY = '__supabase_client__'
 
 export function createClient() {
-  if (!client) {
-    client = createBrowserClient(
+  if (typeof window === 'undefined') {
+    return createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
   }
-  return client
+
+  const g = globalThis as unknown as Record<string, ReturnType<typeof createBrowserClient>>
+  if (!g[SINGLETON_KEY]) {
+    g[SINGLETON_KEY] = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+  }
+  return g[SINGLETON_KEY]
 }

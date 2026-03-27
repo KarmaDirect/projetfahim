@@ -121,7 +121,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule[]>(MOCK_WORK_SCHEDULE)
   const [orderAttachments, setOrderAttachments] = useState<OrderAttachment[]>([])
 
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
 
   // Load real data from Supabase when a real user logs in
   const loadSupabaseData = useCallback(async (userId: string, userRole: string) => {
