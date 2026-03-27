@@ -192,9 +192,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Session restore on mount + auth state listener
+  // Single auth listener — NO separate getSession() call to avoid lock conflicts
   useEffect(() => {
     let mounted = true
+    let initialSessionHandled = false
 
     const loadUserProfile = async (userId: string, email: string, metadata: Record<string, unknown>) => {
       const { data: profile } = await supabase
@@ -215,32 +216,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } as Profile
     }
 
-    // Restore session from cookie — getSession() reads from storage, no network lock
-    supabase.auth.getSession().then(async ({ data: { session } }: { data: { session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown> } } | null } }) => {
+    const handleSession = async (session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown> } } | null) => {
       if (!mounted) return
       if (session?.user) {
         try {
           const userProfile = await loadUserProfile(session.user.id, session.user.email || '', session.user.user_metadata || {})
           if (mounted) {
             setCurrentUser(userProfile)
-            setAuthLoading(false) // Unblock UI immediately — data loads in background
+            setAuthLoading(false)
             loadSupabaseData(session.user.id, userProfile.role).catch(() => {})
-            return // authLoading already set
+            return
           }
         } catch (err) {
           console.error('[Fahim AE] Session restore error:', err)
         }
       }
       if (mounted) setAuthLoading(false)
-    }).catch(() => {
-      if (mounted) setAuthLoading(false)
-    })
+    }
 
-    // Listen for sign-in / sign-out only
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown> } } | null) => {
       if (!mounted) return
+
+      if (event === 'INITIAL_SESSION') {
+        initialSessionHandled = true
+        handleSession(session)
+        return
+      }
+
       if (event === 'SIGNED_OUT') {
         setCurrentUser(null)
+        setAuthLoading(false)
         setProfiles(MOCK_PROFILES)
         setOrders(MOCK_ORDERS)
         setMessages(MOCK_MESSAGES)
@@ -254,10 +259,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setPortfolioProjects(MOCK_PORTFOLIO_PROJECTS)
         setPortfolioBlocks(MOCK_PORTFOLIO_BLOCKS)
         setOrderAttachments([])
+        return
       }
-      // SIGNED_IN is already handled by login() — no need to reload here
-      // This prevents double-loading on login and the associated lock conflicts
+
+      // TOKEN_REFRESHED or SIGNED_IN after initial — reload profile if needed
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && initialSessionHandled) {
+        // Already handled by login() or initial session — skip to avoid double-load
+        return
+      }
     })
+
+    // Safety: if INITIAL_SESSION never fires (old SDK), set authLoading false after timeout
+    setTimeout(() => {
+      if (!initialSessionHandled && mounted) {
+        setAuthLoading(false)
+      }
+    }, 3000)
 
     return () => {
       mounted = false
